@@ -7,6 +7,8 @@ applyTo: "**/*.css"
 
 - Follow the project's existing styling approach, naming conventions, and formatting.
 - Keep styles in the relevant stylesheet and use the project's established component, page, or global stylesheet organization.
+- Prefer individual component styles over global styles: put a component's styles in its own `styles.css` inside the component folder, scoped by a component-specific class prefix (or CSS Modules when the project uses them).
+- Reserve global stylesheets for design tokens (CSS variables), resets, base element and typography styles, and layout shared by the whole app. Do not add component-specific rules to global files.
 - Reuse existing design tokens, variables, and shared styles for colors, spacing, typography, and layout to maintain a consistent theme.
 - Prefer class-based selectors with clear, scoped names. Avoid broad selectors and excessive specificity that can cause unintended effects.
 - Build responsive layouts using existing breakpoints and layout patterns; avoid fixed dimensions when flexible sizing works.
