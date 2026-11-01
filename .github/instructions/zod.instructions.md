@@ -11,7 +11,7 @@ applyTo: ["**/*.{ts,tsx}", "**/{schemas,validators,shared}/**/*.{js,ts}"]
 - Use `safeParse` for expected invalid input and return field errors; use `parse` only where failure is a bug.
 - Compose schemas with `.pick`, `.omit`, `.partial`, `.extend`, and `z.discriminatedUnion` instead of copying them.
 - Set error messages in schemas or map `issues` to user messages in one place; keep Russian/i18n messages in locale files.
-- Use `z.coerce` for query strings and form values, `.trim()` and `.toLowerCase()` for emails, and explicit limits (`min`, `max`) on strings and arrays.
+- Use coercion deliberately for query strings and form values; validate boolean strings explicitly instead of relying on truthiness. Normalize email addresses only under the project's policy, never trim passwords, and set explicit string and array limits.
 - Validate env once at startup (`envSchema.parse(process.env)`) and export a typed config; fail fast.
 - Connect to forms with `@hookform/resolvers/zod` and to OpenAPI with `zod-to-openapi`; keep ORM types (Drizzle) aligned using `drizzle-zod`.
 - Never trust client validation; the server always re-validates with the same schema.

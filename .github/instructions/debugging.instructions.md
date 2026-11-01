@@ -10,7 +10,7 @@ applyTo: ["**/*.{js,jsx,ts,tsx,py}"]
 - Use structured, labeled messages (`console.debug('[Cart] add item', { id, qty })`) with levels (`debug`, `info`, `warn`, `error`); in Python use the `logging` module with `logger.debug(...)` and lazy `%s` formatting instead of `print`.
 - Gate verbose logs behind a debug flag or log level (`import.meta.env.DEV`, `process.env.DEBUG`, `logging.DEBUG`) so they never run in production.
 - Never log secrets, tokens, passwords, or personal data, and redact sensitive fields before logging objects.
-- Always catch async errors with `try`/`catch` around `await`, log the error with context, and rethrow or surface it; never swallow errors silently. Use `error.cause` to preserve the original error.
+- Handle async failures at the appropriate boundary; catch only to recover, add context, or translate the error. Avoid wrapping every `await` or logging the same failure at every layer. Never swallow errors silently; preserve the original cause when wrapping.
 - In React, wrap sections in Error Boundaries and log with `componentDidCatch` or `onCaughtError`; use `useEffect` logs sparingly to trace renders, and remember Strict Mode runs effects twice in development.
 - Use `console.table` for arrays of objects, `console.group` for related output, `console.time()`/`console.timeEnd()` for timing, and `console.trace()` for call stacks.
 - Prefer the debugger over log spam: set breakpoints, use conditional breakpoints and `debugger` temporarily, and use browser DevTools (Network, Performance, React DevTools Profiler) or `python -m pdb`/`breakpoint()`.
@@ -19,3 +19,12 @@ applyTo: ["**/*.{js,jsx,ts,tsx,py}"]
 - Make errors actionable: clear messages that state what failed, with the relevant values, and never expose stack traces or internals to end users.
 - Remove temporary diagnostics (`debugger`, ad-hoc `console.log`, timing calls) before finishing; keep only intentional, leveled logging.
 - Add a regression test for each fixed bug when the project has an established test setup.
+
+## Framework and database diagnostics
+- Record the smallest reproducible case, expected result, actual result, and relevant environment before editing. Change one supported hypothesis at a time.
+- NestJS: inspect provider registration, module exports, guard and pipe order, and exception mapping before changing application structure.
+- Next.js: distinguish server, client, build, and hydration failures; inspect cache behavior and runtime boundaries rather than disabling rendering or caching globally.
+- ORM failures: inspect parameterized query shape, constraints, migrations, transaction scope, pool exhaustion, and query timing. Do not enable production payload logging or expose connection strings.
+- Keep debug instrumentation opt-in and bounded. Disable SQL parameter logging or redact sensitive values.
+- Do not reset databases, remove files, replace dependencies, or rewrite modules to bypass a symptom. Follow agent permissions for destructive and Git operations.
+- Verify the original failure is gone and adjacent behavior is preserved; report the commands run and any remaining limitation without claiming untested success.

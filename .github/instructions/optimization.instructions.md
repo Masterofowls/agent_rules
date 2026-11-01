@@ -17,3 +17,11 @@ applyTo: ["**/*.{js,jsx,ts,tsx,py,sql}"]
 - Keep builds lean: enable minification and tree shaking, analyze bundles, and prefer built-in features over new packages.
 - Keep temporary profiling code (`console.time()`/`console.timeEnd()`, profilers) out of committed code once measurement is done.
 - Preserve behavior: optimizations must not change results, and add or run tests that cover the optimized path.
+
+## Evidence and safety
+- Define a representative workload and measurable target, such as latency, throughput, memory, query count, or bundle size. Record baseline and improved results under the same conditions.
+- Repeat measurements and distinguish cold starts from steady-state performance; do not claim improvements from a single noisy sample.
+- Bound concurrency, queues, caches, and retries. Parallelize only independent work and preserve ordering, transaction guarantees, cancellation, and error handling.
+- Check cache isolation, stale-data behavior, and invalidation. Faster results must not expose another user's data or weaken authorization.
+- Apply one focused change at a time and validate outputs and failure paths. Do not rewrite whole modules, remove checks, or change dependencies without necessity and authorization.
+- Remove files or dependencies only under the agent permissions; prefer reducing work within existing code before adding optimization packages.

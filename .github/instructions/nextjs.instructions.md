@@ -15,3 +15,18 @@ applyTo: ["**/{app,pages}/**/*.{js,jsx,ts,tsx}", "**/next.config.{js,mjs,ts}"]
 - Follow the component folder structure and CSS rules from the React guidelines, and keep styling consistent with the global theme.
 - Use the latest stable Next.js conventions supported by the project's version; do not upgrade as an unrelated change.
 - Preserve existing routes, caching, and rendering behavior when editing.
+
+## Server boundaries and mutations
+- Authenticate and authorize every Server Action and route handler independently; a hidden UI control or protected parent layout is not sufficient.
+- Keep database clients, credentials, and privileged helpers in server-only modules. Pass only serializable, explicitly selected data to Client Components.
+- Validate mutation inputs and surface expected failures through the existing form or API error contract. Revalidate affected data only after a successful mutation.
+- Use request APIs (`cookies`, `headers`, route `params`, and `searchParams`) according to the installed version, including asynchronous access when required.
+- Do not catch framework redirect or not-found control flow as an ordinary application failure.
+
+## Rendering, caching, and testing
+- Make caching decisions explicit for the installed Next.js version. Never share personalized or tenant-specific responses through a public cache.
+- Use supported revalidation and cache-tag APIs; test both fresh and invalidated data instead of assuming framework defaults.
+- Avoid hydration mismatches from random values, time, browser globals, or locale-dependent rendering. Do not use `suppressHydrationWarning` as a general fix.
+- Keep URL state, loading boundaries, errors, metadata, and redirects consistent across direct navigation and client navigation.
+- Use the runtime supported by the database driver and dependencies; do not move Node-only code to an Edge runtime.
+- Validate production builds and critical routes with the existing checks. Use the project's configured linter rather than assuming a `next lint` command exists.
