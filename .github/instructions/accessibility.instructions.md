@@ -29,6 +29,7 @@ applyTo: ["**/*.{jsx,tsx,html,css}", "src/**/*.{js,ts}"]
 - Group related fields with `fieldset` and `legend`; mark required fields in text and with `required`.
 - Show errors next to fields, link them with `aria-describedby`, and announce them; do not rely on color alone.
 - Informative images get descriptive `alt`; decorative images use `alt=""`; icon-only buttons get an accessible name.
+- Use real icon assets or icon-library components, never emoji as interface icons. Hide decorative icons from assistive technology; give icon-only controls an accessible name.
 - Videos have captions; audio has transcripts; no autoplay with sound.
 
 ## Visual

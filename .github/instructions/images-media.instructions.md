@@ -19,9 +19,11 @@ applyTo: ["**/*.{jsx,tsx,html,css}", "src/**/*.{js,ts}"]
 - Lazy-load embeds (YouTube, maps) with a facade or `loading="lazy"` on `iframe`.
 
 ## Fonts
-- Prefer system fonts or self-hosted variable fonts in `woff2`; subset to needed characters (include Cyrillic when Russian is used).
-- Use `font-display: swap`, `<link rel="preload" as="font" type="font/woff2" crossorigin>` for critical fonts only, and a metric-matched fallback (`size-adjust`).
-- Limit to two families and few weights; do not load fonts from many third-party origins.
+- Choose a project-specific font or pairing that supports the design system and audience; do not repeat one default font across unrelated projects.
+- Use free-to-download font files with a compatible license, bundle optimized WOFF2 assets in the repository, and retain required license/attribution. Do not fetch fonts from Google Fonts API or another external font API.
+- Subset bundled fonts to required scripts and weights; include Cyrillic when Russian is used and test glyph coverage. Prefer variable fonts where they reduce file count.
+- Declare local `@font-face` sources and `font-display: swap`; preload only the critical local font file and provide a metric-matched system fallback.
+- Use the design-system font tokens throughout the UI; do not apply one-off font families to individual components.
 
 ## Delivery
 - Serve static assets with long-lived `Cache-Control` and hashed filenames, over a CDN, with Brotli or gzip.

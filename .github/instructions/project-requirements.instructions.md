@@ -12,6 +12,8 @@ applyTo: "**"
 - For documentation-only or configuration-only projects, use applicable validation and document why runtime tests or coverage do not apply. Do not invent meaningless tests or dependencies.
 
 ## Linting and formatting
+- For every code change, run both the project's linter and formatter on the changed files or the narrowest relevant scope before finishing. Do not skip either because a change seems small.
+- If either tool or command is unavailable, state that it was not run and why; never claim it passed. Do not expand a narrow task into adding or migrating tooling without approval.
 - Provide documented, repeatable lint, format, and non-mutating format-check commands using the existing package manager or task runner.
 - Prefer Oxlint for new JavaScript and TypeScript projects; keep required checks it does not support. Use the existing language-appropriate linter for other stacks.
 - Use one compatible formatter per language and shared configuration. Follow the linting and formatting instructions; do not reformat unrelated files.

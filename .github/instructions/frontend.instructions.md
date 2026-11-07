@@ -17,6 +17,9 @@ applyTo: ["**/*.{jsx,tsx,css,html}", "src/**/*.{js,ts}"]
 - Configure one shared theme (colors, typography, spacing, radius, dark mode) through the library's theme tokens or CSS variables, so every component matches the global theme.
 - Wrap library components in small project components only to apply theme defaults or shared behavior; do not copy-paste and heavily fork library code.
 - Import only the components used, with named imports and ES modules, so tree shaking keeps the bundle small, and check bundle size before adding a library.
+- Never use emoji or text symbols as interface icons. Use a consistent real icon set (for example Lucide, Tabler, or Phosphor) with accessible labels for icon-only controls.
+- Prefer an appropriate animated icon set such as Lucide Animated for state transitions or deliberate feedback, not constant decoration. Respect reduced-motion preferences and avoid adding an icon package if the project already has a suitable one.
+- Keep icon style, stroke weight, size, and color consistent with the project's design tokens. Do not mix unrelated icon packs or use Unicode glyphs as substitutes.
 - For copy-in libraries (shadcn, Magic UI, Aceternity UI, React Bits), add components through their CLI or documented install steps, place them in their own component folder, and keep their CSS in a separate stylesheet when the project is not using Tailwind.
 - Follow each library's current documentation for installation and API, and use the latest stable version supported by the project's React version.
 - Build custom components only when no suitable library component exists, and keep them consistent with the chosen library's design and the project's theme.
