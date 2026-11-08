@@ -34,3 +34,4 @@ applyTo: "**"
 - Keep instructions, explanations, and replies concise; include only what the task requires.
 - Update existing documentation rather than creating duplicate guides. Do not create unsolicited plans, summaries, reports, or extra Markdown files.
 - Create new documentation or instruction files only when requested or necessary for the change and no existing file fits. Avoid boilerplate, repeated rules, and line-by-line commentary.
+- Do not add `contributions.md`, `CONTRIBUTING.md`, or other repository boilerplate by default. Preserve existing files and put brief required usage notes in existing documentation.

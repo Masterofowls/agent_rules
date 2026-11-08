@@ -31,6 +31,11 @@ Match intent, not just exact words; Russian requests and synonyms use the same a
 | PostgreSQL query or schema optimization | `supabase-postgres-best-practices` when applicable to the database task | psql, sql, orm, optimization |
 | shadcn components in an existing compatible project | `shadcn` and applicable design skills | frontend, design-system; do not introduce Tailwind without permission |
 | Configure deployment, Docker, release readiness | `deployment-patterns`; `deploy-to-vercel` only for an actual Vercel deployment request | deployment, docker-cicd, agent-permissions |
+| FTP, FTPS, SFTP uploads or remote hosting files | Use a matching installed skill only if available; no assumed FTP skill | ftp, deployment, agent-permissions |
+| SSH connection, remote VPS commands or services | `deployment-patterns` when deploying or managing deployment; otherwise match the current catalog | ssh, deployment, agent-permissions |
+| Reusable helpers, scripts, shared validation or repository layout | Match the current catalog only when relevant; no assumed reuse skill | reusable-patterns, project-structure, validation |
+| PowerShell, CMD, Bash, cross-platform script pairs or OS dispatch | Match a relevant installed skill if available; no assumed shell skill | powershell-cmd, shell-bash, reusable-patterns, agent-permissions |
+| Check remote URL, PostgreSQL/Supabase, SSH, FTPS, Git leaks, tools, Docker, OS, or preview Ubuntu setup | `ops-checks`; reuse its bundled scripts, obtain target authorization before remote probes or setup | reusable-patterns, ssh, ftp, security, agent-permissions |
 | Russian UI, translation, grammar, authorship credits | `russian-language` | russian, anti-ai-writing |
 | Edit agent rules, instructions, prompts, or skills | `agent-customization` | agent-permissions, anti-ai-writing |
 | Unexpected agent behavior or ignored instructions | `troubleshoot` | skills, debugging |

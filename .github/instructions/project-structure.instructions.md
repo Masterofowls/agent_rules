@@ -62,6 +62,8 @@ src/
 - Next.js: keep `app/` for routing only and import features from `src/features`; colocate `loading.jsx`, `error.jsx`, and route handlers with their route.
 
 ## Tests and root files
+- Do not add `contributions.md`, `CONTRIBUTING.md`, changelogs, standalone setup guides, or similar repository boilerplate unless explicitly requested or required by the task. Update the existing README for brief necessary usage notes; preserve existing documentation.
+- Keep reusable maintenance tools in the existing scripts directory (or `scripts/` when needed), with tests and a documented entry point. Do not scatter one-off scripts in the repository root.
 - Colocate tests with code (`Component.test.jsx`) and keep E2E tests in `e2e/` at the root.
 - Root keeps config only: `package.json`, `vite.config.js`, `.oxlintrc.json`, `.env.example`, `Dockerfile`, `README.md`; no stray scripts or scratch files.
 - Use relative imports as the project rules require; add an alias (`@/`) only if the project already uses one.
