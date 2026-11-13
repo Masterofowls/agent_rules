@@ -1,6 +1,6 @@
 ---
 description: "Use when designing or building UI: mobile-first, adaptive, fluent, modern, and unique visual design. Covers layout, responsiveness, motion, depth, and avoiding generic templated looks."
-applyTo: ["**/*.{jsx,tsx,css,html}", "src/**/*.{js,ts}"]
+applyTo: "**/*.{jsx,tsx,css,html}"
 ---
 
 # Design
@@ -23,7 +23,7 @@ applyTo: ["**/*.{jsx,tsx,css,html}", "src/**/*.{js,ts}"]
 ## Modern design
 - Prefer clean layouts, strong typography, consistent radii, and restrained color over decoration.
 - Use modern CSS: Grid, `gap`, `clamp()`, `aspect-ratio`, `:has()`, `color-mix()`, logical properties, and view transitions when supported.
-- Use SVG or icon libraries for icons; use optimized images (`webp`/`avif`) with `loading="lazy"`.
+- - Use SVG or icon libraries for icons; use optimized images (`webp`/`avif`). Lazy-load below-the-fold images only; do not lazy-load the hero/LCP image (see the media instructions).
 - Support light and dark themes through `prefers-color-scheme` and tokens.
 
 ## Unique design
@@ -31,7 +31,7 @@ applyTo: ["**/*.{jsx,tsx,css,html}", "src/**/*.{js,ts}"]
 - Avoid generic AI/template looks: default purple gradients, identical card grids, stock hero layouts, emoji as icons, and filler copy.
 - Add a few distinctive details (custom illustration style, a signature layout, thoughtful micro-interactions) without hurting usability or performance.
 - Use real content and realistic data in designs, not lorem ipsum.
-- Use the installed design skills (`frontend-design`, `design-taste-frontend`, `no-ai-design-slop`) to check originality before finishing.
+- Select one applicable primary design skill, use `no-ai-design-slop` during visual work, and defer `audit-ai-design-slop` until final visual review; follow the skills routing instructions instead of loading every design skill.
 
 ## Accessibility
 - Contrast at least 4.5:1 for text and 3:1 for large text and UI parts.

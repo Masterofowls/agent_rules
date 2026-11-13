@@ -1,6 +1,6 @@
 ---
 description: "Use when adding images, video, audio, or fonts: responsive srcset, avif/webp, lazy loading, video optimization, and font loading."
-applyTo: ["**/*.{jsx,tsx,html,css}", "src/**/*.{js,ts}"]
+applyTo: "**/*.{jsx,tsx,html,css}"
 ---
 
 # Images, media, and fonts

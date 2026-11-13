@@ -1,9 +1,11 @@
 ---
 description: "Use when adding animation, transitions, or motion: Framer Motion, GSAP, CSS transitions, performance-safe transforms, and reduced motion."
-applyTo: ["**/*.{jsx,tsx,css}", "src/**/*.{js,ts}"]
+applyTo: "**/*.{jsx,tsx,css}"
 ---
 
 # Animation
+
+Apply these rules when adding or changing motion, not merely because a file contains UI.
 
 ## Choose the simplest tool
 - Prefer CSS transitions and `@keyframes` for hover, focus, and simple state changes; use the View Transitions API for page transitions when supported.

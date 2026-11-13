@@ -42,12 +42,12 @@ src/
 
 ## Redux and RTK
 - Large projects: one store in `app/store.js`; each feature owns its slice in `model/` and its endpoints in `api/`.
-- Inject feature slices and endpoints into the root reducer and the base API (`injectEndpoints`) instead of one giant file.
-- Keep selectors next to the slice; export typed hooks (`useAppDispatch`, `useAppSelector`) from `app/` or `shared/lib`.
-- Keep server data in RTK Query, UI and client state in slices; do not duplicate fetched data in slices.
+- The app composes feature reducers. Features may inject endpoints into a base API in `shared/api`, but must not import the application store.
+- Keep selectors next to the slice. Put store-dependent typed hooks with a reusable store module below their consumers (for example `shared/store`), or keep them in `app/` for application-layer use only; `shared/lib` must not import `app/`.
+- When using Redux, keep shared client state in slices and server data in RTK Query or the established data layer; do not duplicate fetched data in slices.
 
 ## Routing and pages
-- One folder per page in `pages/`, with its route component, styles, and a lazy-loaded export (`React.lazy`); keep the route table in `app/router`.
+- Use the framework's page folders and route-level code splitting. For client-side React routers without framework-managed splitting, use supported route lazy loading or `React.lazy` where beneficial; do not force either into Next.js server routes.
 - Pages stay thin: layout and composition only, logic lives in features and entities.
 
 ## Backend layout (Express, FastAPI, Django, Flask)

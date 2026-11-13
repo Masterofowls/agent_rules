@@ -11,11 +11,14 @@ Usage:
     python install-claude.py <project>    # project-level: <project>/.claude/rules/agent-rules/
 """
 
+import argparse
 import json
 import re
 import shutil
 import sys
 from pathlib import Path
+
+from scripts import setup_agents
 
 REPO = Path(__file__).resolve().parent
 SRC = REPO / ".github" / "instructions"
@@ -26,7 +29,7 @@ HOOKS = [
     ("PreToolUse", "Write|Edit|MultiEdit", "pre-edit"),
     ("Stop", None, "stop"),
 ]
-FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.S)
+FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 
 
 def parse_frontmatter(text):
@@ -40,7 +43,7 @@ def parse_frontmatter(text):
         if value.startswith(("[", '"')):
             value = json.loads(value)
         meta[key.strip()] = value
-    return meta, text[match.end():]
+    return meta, text[match.end() :]
 
 
 def convert(text):
@@ -49,7 +52,9 @@ def convert(text):
     patterns = [apply_to] if isinstance(apply_to, str) else apply_to
     lines = ["---"]
     if meta.get("description"):
-        lines.append(f"description: {json.dumps(meta['description'], ensure_ascii=False)}")
+        lines.append(
+            f"description: {json.dumps(meta['description'], ensure_ascii=False)}"
+        )
     if patterns != ["**"]:
         lines.append("paths:")
         lines += [f"  - {json.dumps(p)}" for p in patterns]
@@ -72,8 +77,11 @@ def install_hooks(claude_dir, script_ref):
         groups = hooks.setdefault(event, [])
         # Drop an older registration of this script so reinstalls do not duplicate it.
         for group in groups:
-            group["hooks"] = [h for h in group.get("hooks", [])
-                              if HOOK_SCRIPT.name not in h.get("command", "")]
+            group["hooks"] = [
+                h
+                for h in group.get("hooks", [])
+                if HOOK_SCRIPT.name not in h.get("command", "")
+            ]
         groups[:] = [g for g in groups if g["hooks"]]
         group = {"hooks": [{"type": "command", "command": command, "timeout": 10}]}
         if matcher:
@@ -84,21 +92,25 @@ def install_hooks(claude_dir, script_ref):
 
 
 def main():
-    project = len(sys.argv) > 1
-    root = Path(sys.argv[1]) if project else Path.home()
-    dest = root / ".claude" / "rules" / "agent-rules"
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
-    for src in sorted(SRC.glob("*.instructions.md")):
-        name = src.name.replace(".instructions.md", ".md")
-        text = src.read_text(encoding="utf-8")
-        (dest / name).write_text(convert(text), encoding="utf-8", newline="\n")
-        print(f"{name}")
-    print(f"Installed to {dest}")
-    script_ref = ("$CLAUDE_PROJECT_DIR" if project else "$HOME") + f"/.claude/hooks/{HOOK_SCRIPT.name}"
-    install_hooks(root / ".claude", script_ref)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "project", nargs="?", help="Project directory; defaults to user setup"
+    )
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    options = argparse.Namespace(
+        home=args.project or str(Path.home()),
+        vscode_prompts=None,
+        dry_run=args.dry_run,
+        external_skills=False,
+    )
+    try:
+        setup_agents.install(options, claude_only=True)
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"Setup failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

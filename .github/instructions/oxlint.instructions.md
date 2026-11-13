@@ -1,6 +1,6 @@
 ---
 description: "Use when configuring or running Oxlint, its JavaScript and TypeScript rules, plugins, overrides, and repository lint scripts."
-applyTo: ["**/.oxlintrc.json", "**/oxlint.config.{js,ts,mjs}", "**/package.json"]
+applyTo: ["**/.oxlintrc.json", "**/oxlint.config.{js,ts,mjs}"]
 ---
 
 # Oxlint

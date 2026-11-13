@@ -1,6 +1,6 @@
 ---
 description: "Use when configuring or running Pylint in an existing Python project, including pyproject.toml, pylint config, plugins, and diagnostics."
-applyTo: ["**/*.py", "**/pyproject.toml", "**/.pylintrc", "**/pylintrc", "**/pylint.toml"]
+applyTo: ["**/.pylintrc", "**/pylintrc", "**/pylint.toml"]
 ---
 
 # Pylint

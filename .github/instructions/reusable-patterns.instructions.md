@@ -6,7 +6,7 @@ applyTo: ["**/{src,app,shared,lib,scripts,tools}/**/*.{js,jsx,ts,tsx,py,ps1,sh}"
 # Reusable code and scripts
 
 - Search for existing implementations before adding logic. Reuse compatible helpers, schemas, and scripts instead of copying near-identical code.
-- For URL, PostgreSQL/Supabase, SSH, FTPS, Git-leak, runtime, Docker, OS, and Ubuntu setup checks, load the installed `ops-checks` skill and reuse its bundled scripts when suitable. Do not recreate them from memory; inspect their options, permissions, and limitations first.
+- For URL, DNS, TLS expiry, disk space, Git worktree/leak, PostgreSQL/Supabase, SSH, FTPS, runtime, Docker, OS, and Ubuntu setup checks, load the installed `ops-checks` skill and reuse its bundled scripts when suitable. Do not recreate them from memory; inspect their options, permissions, and limitations first.
 - Extract shared behavior when there is a real repeated use or an explicit reuse requirement. Do not turn one small task into a generic framework.
 - Keep domain-specific logic in its feature; share only code whose meaning and contract are genuinely common. Do not couple unrelated features through a catch-all utility file.
 - Separate reusable logic from CLI, UI, network, and filesystem adapters where useful. Importing a module must not run a script, connect remotely, or mutate data.

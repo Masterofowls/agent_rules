@@ -1,6 +1,6 @@
 ---
 description: "Use when defining or using a global design system: design tokens, colors, typography and fonts, spacing, and shared components. Keeps all UI consistent."
-applyTo: ["**/*.{jsx,tsx,css}", "src/**/*.{js,ts}"]
+applyTo: "**/*.{jsx,tsx,css}"
 ---
 
 # Global design system

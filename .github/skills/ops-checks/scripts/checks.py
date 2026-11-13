@@ -1,7 +1,9 @@
 """Bounded operational checks with no credential-bearing diagnostic output."""
 
 import argparse
+import ipaddress
 import json
+import math
 import os
 import platform
 import re
@@ -22,7 +24,13 @@ class CheckError(Exception):
         self.code = code
 
 
-def execute(command: list[str], timeout: int, env: dict[str, str] | None = None) -> str:
+def execute(
+    command: list[str],
+    timeout: int,
+    env: dict[str, str] | None = None,
+    *,
+    redacted_error: bool = False,
+) -> str:
     if not shutil.which(command[0]):
         raise CheckError(f"Required tool unavailable: {command[0]}", 2)
     try:
@@ -39,6 +47,19 @@ def execute(command: list[str], timeout: int, env: dict[str, str] | None = None)
     except OSError as exc:
         raise CheckError(f"Cannot start {command[0]}", 2) from exc
     if result.returncode:
+        if redacted_error:
+            # Only our network child supplies redacted JSON; never trust native stderr.
+            try:
+                diagnostic = json.loads(result.stderr)
+            except json.JSONDecodeError as exc:
+                raise CheckError(
+                    "Network probe failed without a valid diagnostic"
+                ) from exc
+            if not isinstance(diagnostic, dict) or not isinstance(
+                diagnostic.get("error"), str
+            ):
+                raise CheckError("Network probe failed without a valid diagnostic")
+            raise CheckError(diagnostic["error"], 2 if result.returncode == 2 else 1)
         # Native errors can contain connection strings or private remote data.
         raise CheckError(f"{command[0]} failed (exit {result.returncode})")
     return result.stdout.strip()
@@ -47,6 +68,115 @@ def execute(command: list[str], timeout: int, env: dict[str, str] | None = None)
 def require_authorization(args: argparse.Namespace) -> None:
     if not args.authorized:
         raise CheckError("Explicit target authorization required (--authorized)", 2)
+
+
+def host_name(value: str) -> str:
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        pass
+    try:
+        name = value.removesuffix(".").encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise CheckError("Invalid host name", 2) from exc
+    if len(name) > 253 or not all(
+        re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+        for label in name.split(".")
+    ):
+        raise CheckError("Use a host name or IP address, not a URL", 2)
+    return name
+
+
+def network_check(args: argparse.Namespace) -> dict:
+    require_authorization(args)
+    host = host_name(args.host)
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("network_probe.py")),
+        args.task,
+        "--host",
+        host,
+        "--timeout",
+        str(args.timeout),
+        "--authorized",
+    ]
+    if args.task == "check-tls":
+        command += ["--port", str(args.port), "--min-days", str(args.min_days)]
+    output = execute(command, args.timeout, redacted_error=True)
+    try:
+        result = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise CheckError("Network probe returned invalid JSON") from exc
+    if not isinstance(result, dict):
+        raise CheckError("Network probe returned an invalid result")
+    return result
+
+
+def check_disk(args: argparse.Namespace) -> dict:
+    usage = shutil.disk_usage(Path(args.path).resolve())
+    if usage.total <= 0:
+        raise CheckError("Disk capacity could not be determined")
+    free_gib = usage.free / 1024**3
+    free_percent = usage.free / usage.total * 100
+    if free_gib < args.min_free_gib or free_percent < args.min_free_percent:
+        raise CheckError(
+            f"Free disk space below threshold: {free_gib:.2f} GiB ({free_percent:.2f}%)"
+        )
+    return {
+        "total_bytes": usage.total,
+        "free_bytes": usage.free,
+        "free_percent": round(free_percent, 2),
+        "minimum_free_gib": args.min_free_gib,
+        "minimum_free_percent": args.min_free_percent,
+    }
+
+
+def check_git_state(args: argparse.Namespace) -> dict:
+    repo = str(Path(args.repo).resolve())
+    if (
+        execute(["git", "-C", repo, "rev-parse", "--is-inside-work-tree"], args.timeout)
+        != "true"
+    ):
+        raise CheckError("Target is not a Git worktree", 2)
+    branch = execute(["git", "-C", repo, "branch", "--show-current"], args.timeout)
+    records = execute(
+        ["git", "--no-optional-locks", "-C", repo, "status", "--porcelain=v2", "-z"],
+        args.timeout,
+    ).split("\0")
+    counts = {"staged": 0, "unstaged": 0, "untracked": 0, "conflicted": 0}
+    index = 0
+    while index < len(records):
+        record = records[index]
+        index += 1
+        if not record:
+            continue
+        kind = record.split(" ", 1)[0]
+        if kind == "?":
+            counts["untracked"] += 1
+        elif kind == "u":
+            counts["conflicted"] += 1
+        elif kind in ("1", "2"):
+            fields = record.split(" ", 2)
+            if len(fields) < 3 or len(fields[1]) != 2:
+                raise CheckError("Git returned an invalid status record")
+            counts["staged"] += fields[1][0] != "."
+            counts["unstaged"] += fields[1][1] != "."
+            if kind == "2":
+                index += 1  # Skip the original path of a rename/copy record.
+        else:
+            raise CheckError("Git returned an unsupported status record")
+    clean = not any(counts.values())
+    if args.require_clean and not clean:
+        raise CheckError(
+            "Worktree is not clean: "
+            + ", ".join(f"{name}={count}" for name, count in counts.items())
+        )
+    return {
+        "branch": branch or None,
+        "detached": not bool(branch),
+        "clean": clean,
+        **counts,
+    }
 
 
 def target_url(value: str, schemes: tuple[str, ...]) -> None:
@@ -310,6 +440,23 @@ def ssh_port(value: str) -> int:
     return number
 
 
+def nonnegative_number(value: str) -> float:
+    try:
+        number = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Expected a nonnegative number") from exc
+    if not math.isfinite(number) or number < 0:
+        raise argparse.ArgumentTypeError("Expected a finite nonnegative number")
+    return number
+
+
+def percentage(value: str) -> float:
+    number = nonnegative_number(value)
+    if number > 100:
+        raise argparse.ArgumentTypeError("Percentage must be 0-100")
+    return number
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     tasks = root.add_subparsers(dest="task", required=True)
@@ -323,6 +470,10 @@ def parser() -> argparse.ArgumentParser:
         "check-ftp",
         "check-git-leaks",
         "check-docker",
+        "check-dns",
+        "check-tls",
+        "check-disk",
+        "check-git-state",
         "setup-ubuntu",
     ):
         task = tasks.add_parser(name)
@@ -330,6 +481,18 @@ def parser() -> argparse.ArgumentParser:
         task.add_argument("--authorized", action="store_true")
         if name == "check-url":
             task.add_argument("--url", required=True)
+        elif name in ("check-dns", "check-tls"):
+            task.add_argument("--host", required=True)
+            if name == "check-tls":
+                task.add_argument("--port", type=ssh_port, default=443)
+                task.add_argument("--min-days", type=nonnegative_number, default=14)
+        elif name == "check-disk":
+            task.add_argument("--path", default=".")
+            task.add_argument("--min-free-gib", type=nonnegative_number, default=1)
+            task.add_argument("--min-free-percent", type=percentage, default=10)
+        elif name == "check-git-state":
+            task.add_argument("--repo", default=".")
+            task.add_argument("--require-clean", action="store_true")
         elif name in ("check-postgres", "check-supabase"):
             task.add_argument("--service", required=True)
         elif name == "check-ssh":
@@ -365,6 +528,10 @@ def main(argv: list[str] | None = None) -> int:
             "check-ssh": check_ssh,
             "check-ftp": check_ftp,
             "check-git-leaks": check_git_leaks,
+            "check-dns": network_check,
+            "check-tls": network_check,
+            "check-disk": check_disk,
+            "check-git-state": check_git_state,
             "setup-ubuntu": setup_ubuntu,
         }
         if args.task == "detect-os":

@@ -1,6 +1,6 @@
 ---
 description: "Use when building or reviewing UI for accessibility (a11y): semantic HTML, ARIA, keyboard navigation, focus management, labels, alt text, contrast, and axe-style audits."
-applyTo: ["**/*.{jsx,tsx,html,css}", "src/**/*.{js,ts}"]
+applyTo: "**/*.{jsx,tsx,html,css}"
 ---
 
 # Accessibility (a11y)

@@ -1,6 +1,6 @@
 ---
 description: "Use when configuring or running Prettier for JavaScript, TypeScript, CSS, HTML, JSON, Markdown, or supported templates."
-applyTo: ["**/.prettierrc*", "**/prettier.config.{js,cjs,mjs,ts}", "**/.prettierignore", "**/package.json"]
+applyTo: ["**/.prettierrc*", "**/prettier.config.{js,cjs,mjs,ts}", "**/.prettierignore"]
 ---
 
 # Prettier

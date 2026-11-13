@@ -1,9 +1,11 @@
 ---
 description: "Use when creating or modifying Drizzle ORM schemas, queries, migrations, or drizzle.config files. Covers schema definition, typed queries, migrations, and safety."
-applyTo: ["**/drizzle.config.{js,mjs,ts}", "**/{db,database,drizzle}/**/*.{js,ts}", "**/schema.{js,ts}"]
+applyTo: ["**/drizzle.config.{js,mjs,ts}", "**/drizzle/**/*.{js,ts}", "**/*drizzle*.{js,ts}"]
 ---
 
 # Drizzle ORM Guidelines
+
+Apply these rules only when the project uses Drizzle, confirmed by its dependencies, imports, or configuration. Generic database files do not imply Drizzle; do not introduce it during unrelated work.
 
 - Follow the project's existing database dialect and Drizzle version (`pg-core`, `mysql-core`, or `sqlite-core`) and keep imports consistent with it.
 - Define tables in schema files with explicit column types, `notNull`, `default`, `unique`, indexes, and foreign key `references`; export inferred types with `$inferSelect` and `$inferInsert`.

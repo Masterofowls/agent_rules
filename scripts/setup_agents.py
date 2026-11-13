@@ -6,9 +6,11 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,11 +28,34 @@ def convert(text: str, claude: bool) -> str:
         raise ValueError("Instruction frontmatter missing")
     metadata = {}
     for line in match[1].splitlines():
-        key, _, value = line.partition(":")
-        metadata[key.strip()] = json.loads(value.strip())
-    patterns = metadata["applyTo"]
+        key, separator, value = line.partition(":")
+        key = key.strip()
+        if not separator or key not in ("description", "applyTo") or key in metadata:
+            raise ValueError(
+                "Frontmatter requires description and applyTo exactly once"
+            )
+        try:
+            metadata[key] = json.loads(value.strip())
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Frontmatter {key} must be a JSON string or array on one line"
+            ) from exc
+    if (
+        not isinstance(metadata.get("description"), str)
+        or not metadata["description"].strip()
+    ):
+        raise ValueError("Instruction description must be a nonempty string")
+    patterns = metadata.get("applyTo")
     if isinstance(patterns, str):
         patterns = [patterns]
+    if (
+        not isinstance(patterns, list)
+        or not patterns
+        or any(
+            not isinstance(pattern, str) or not pattern.strip() for pattern in patterns
+        )
+    ):
+        raise ValueError("Instruction applyTo must contain nonempty string patterns")
     # The workspace React scope is intentionally narrower than user scope.
     if patterns == ["src/**/*.{js,jsx,ts,tsx,css}"]:
         patterns = ["**/*.{js,jsx,ts,tsx,css}"]
@@ -45,9 +70,18 @@ def convert(text: str, claude: bool) -> str:
     return "\n".join([*lines, "---", match.string[match.end() :].lstrip("\r\n")])
 
 
+def check_destination(path: Path) -> None:
+    for target in (path, *path.parents):
+        if target.is_symlink() or (
+            hasattr(target, "is_junction") and target.is_junction()
+        ):
+            raise ValueError(f"Refusing linked destination: {target}")
+    if path.exists() and not path.is_file():
+        raise ValueError(f"Destination is not a regular file: {path}")
+
+
 def put(path: Path, content: bytes, dry_run: bool) -> None:
-    if path.is_symlink():
-        raise ValueError(f"Refusing to overwrite symlink: {path}")
+    check_destination(path)
     if path.exists() and path.read_bytes() == content:
         return
     print(f"{'Would install' if dry_run else 'Installing'}: {path}")
@@ -57,9 +91,24 @@ def put(path: Path, content: bytes, dry_run: bool) -> None:
     if path.exists():
         digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
         backup = path.with_name(path.name + f".agent-rules-backup-{digest}")
+        check_destination(backup)
         if not backup.exists():
             shutil.copy2(path, backup)
-    path.write_bytes(content)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=path.name + ".", suffix=".tmp", delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if path.exists():
+            shutil.copymode(path, temporary)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
     if path.read_bytes() != content:
         raise OSError(f"Verification failed: {path}")
 
@@ -78,11 +127,25 @@ def vscode_directory(home: Path) -> Path:
     return base / "Code" / "User" / "prompts"
 
 
+def owned_hook(command: str, script: Path, home: Path, action: str) -> bool:
+    try:
+        tokens = shlex.split(command, posix=platform.system() != "Windows")
+    except ValueError:
+        return False
+    if len(tokens) != 3 or tokens[-1] != action:
+        return False
+    reference = (
+        tokens[1].strip('"').replace("${HOME}", str(home)).replace("$HOME", str(home))
+    )
+    return Path(reference).expanduser().resolve() == script.resolve()
+
+
 def register_hooks(home: Path, dry_run: bool) -> None:
     directory = home / ".claude"
     script = directory / "hooks" / "skill_router.py"
-    put(script, (ROOT / "hooks" / "skill_router.py").read_bytes(), dry_run)
     path = directory / "settings.json"
+    check_destination(script)
+    check_destination(path)
     settings = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     hooks = settings.setdefault("hooks", {})
     if not isinstance(hooks, dict):
@@ -91,28 +154,32 @@ def register_hooks(home: Path, dry_run: bool) -> None:
     if platform.system() == "Windows":
         command_base = f'"{python}" "{script}"'
     else:
-        import shlex
-
         command_base = f"{shlex.quote(python)} {shlex.quote(str(script))}"
     for event, matcher, action in EVENTS:
         groups = hooks.setdefault(event, [])
         if not isinstance(groups, list):
             raise TypeError(f"Existing {event} hooks must be a list")
         command = f"{command_base} {action}"
-        if any(
-            item.get("command") == command
-            for group in groups
-            for item in group.get("hooks", [])
-        ):
-            continue
+        retained = []
+        for group in groups:
+            items = [
+                item
+                for item in group.get("hooks", [])
+                if item.get("type") != "command"
+                or not owned_hook(item.get("command", ""), script, home, action)
+            ]
+            if items or not group.get("hooks"):
+                retained.append({**group, "hooks": items})
+        groups[:] = retained
         group = {"hooks": [{"type": "command", "command": command, "timeout": 10}]}
         if matcher:
             group["matcher"] = matcher
         groups.append(group)
+    put(script, (ROOT / "hooks" / "skill_router.py").read_bytes(), dry_run)
     put(path, (json.dumps(settings, indent=2) + "\n").encode(), dry_run)
 
 
-def install(args: argparse.Namespace) -> None:
+def install(args: argparse.Namespace, claude_only: bool = False) -> None:
     home = Path(args.home).expanduser().resolve()
     vscode = (
         Path(args.vscode_prompts).expanduser().resolve()
@@ -131,6 +198,7 @@ def install(args: argparse.Namespace) -> None:
     if not rules:
         raise ValueError("No repository instructions found")
     settings_path = home / ".claude" / "settings.json"
+    check_destination(settings_path)
     if settings_path.exists():
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
         if not isinstance(settings, dict):
@@ -143,25 +211,44 @@ def install(args: argparse.Namespace) -> None:
             if not isinstance(groups, list) or any(
                 not isinstance(group, dict)
                 or not isinstance(group.get("hooks", []), list)
-                or any(not isinstance(item, dict) for item in group.get("hooks", []))
+                or any(
+                    not isinstance(item, dict)
+                    or (
+                        item.get("type") == "command"
+                        and not isinstance(item.get("command"), str)
+                    )
+                    for item in group.get("hooks", [])
+                )
                 for group in groups
             ):
                 raise TypeError(f"Invalid existing hook groups: {event}")
     if args.external_skills and not args.dry_run and not shutil.which("npx"):
         raise ValueError("Node.js/npx is required for --external-skills")
+    files = []
     for name, copilot, claude in rules:
-        put(home / ".copilot" / "instructions" / name, copilot.encode(), args.dry_run)
-        put(vscode / name, copilot.encode(), args.dry_run)
-        put(
-            home
-            / ".claude"
-            / "rules"
-            / "agent-rules"
-            / name.replace(".instructions", ""),
-            claude.encode(),
-            args.dry_run,
+        if not claude_only:
+            files.extend(
+                [
+                    (home / ".copilot" / "instructions" / name, copilot.encode()),
+                    (vscode / name, copilot.encode()),
+                ]
+            )
+        files.append(
+            (
+                home
+                / ".claude"
+                / "rules"
+                / "agent-rules"
+                / name.replace(".instructions", ""),
+                claude.encode(),
+            )
         )
-    for skill in sorted((ROOT / ".github" / "skills").iterdir()):
+    skills = (
+        []
+        if getattr(args, "rules_only", False)
+        else sorted((ROOT / ".github" / "skills").iterdir())
+    )
+    for skill in skills:
         if not skill.is_dir() or not (skill / "SKILL.md").is_file():
             continue
         for source in sorted(skill.rglob("*")):
@@ -180,11 +267,18 @@ def install(args: argparse.Namespace) -> None:
                 home / ".agents" / "skills",
                 home / ".claude" / "skills",
             ):
-                put(
-                    destination / skill.name / relative,
-                    source.read_bytes(),
-                    args.dry_run,
-                )
+                if not claude_only or destination == home / ".claude" / "skills":
+                    files.append(
+                        (destination / skill.name / relative, source.read_bytes())
+                    )
+    for destination in [
+        *(path for path, _ in files),
+        settings_path,
+        home / ".claude" / "hooks" / "skill_router.py",
+    ]:
+        check_destination(destination)
+    for path, content in files:
+        put(path, content, args.dry_run)
     register_hooks(home, args.dry_run)
     if args.external_skills:
         packages = json.loads((ROOT / "scripts" / "external-skills.json").read_text())
@@ -234,6 +328,11 @@ def main() -> int:
         action="store_true",
         help="Download third-party skills; may update matching installed skills",
     )
+    parser.add_argument(
+        "--rules-only",
+        action="store_true",
+        help="Update instructions and Claude hooks without changing skills",
+    )
     args = parser.parse_args()
     if not args.home:
         args.home = str(Path.home())
@@ -242,6 +341,8 @@ def main() -> int:
         custom_home = True
     if args.external_skills and (custom_home or args.vscode_prompts):
         parser.error("--external-skills cannot be combined with custom destinations")
+    if args.rules_only and args.external_skills:
+        parser.error("--rules-only cannot be combined with --external-skills")
     try:
         install(args)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:

@@ -1,19 +1,23 @@
+import argparse
 import contextlib
 import importlib.util
 import io
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
 import unittest
 import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import checks
+import network_probe
 
 spec = importlib.util.spec_from_file_location("launcher", SCRIPTS / "run.py")
 launcher = importlib.util.module_from_spec(spec)
@@ -45,6 +49,8 @@ class ChecksTest(unittest.TestCase):
     def test_authorization_blocks_remote_commands(self):
         for argv in (
             ["check-url", "--url", "https://example.test"],
+            ["check-dns", "--host", "example.test"],
+            ["check-tls", "--host", "example.test"],
             ["check-postgres", "--service", "test"],
             ["check-supabase", "--service", "test"],
             ["check-ssh", "--host", "example.test", "--user", "deploy"],
@@ -54,6 +60,179 @@ class ChecksTest(unittest.TestCase):
             with self.subTest(task=argv[0]), patch("checks.execute") as execute:
                 self.assertEqual(self.invoke(argv)[0], 2)
                 execute.assert_not_called()
+
+    def test_network_parent_bounds_entire_probe_and_rejects_bad_hosts(self):
+        for task in ("check-dns", "check-tls"):
+            with patch("checks.execute", return_value='{"verified": true}') as execute:
+                code, result = self.invoke(
+                    [task, "--host", "example.test", "--timeout", "7", "--authorized"]
+                )
+                self.assertEqual(code, 0)
+                self.assertTrue(result["verified"])
+                command, timeout = execute.call_args.args
+                self.assertEqual(command[0], sys.executable)
+                self.assertIn("network_probe.py", command[1])
+                self.assertEqual(timeout, 7)
+                self.assertIn("--authorized", command)
+            with patch(
+                "checks.execute", side_effect=checks.CheckError("probe timed out")
+            ):
+                self.assertEqual(
+                    self.invoke([task, "--host", "example.test", "--authorized"])[0], 1
+                )
+        for host in (
+            "https://example.test",
+            "host;command",
+            "bad host",
+            "-option",
+            "host..",
+        ):
+            with self.subTest(host=host), self.assertRaises(checks.CheckError):
+                checks.host_name(host)
+        with patch("checks.execute", return_value="not JSON"):
+            self.assertEqual(
+                self.invoke(["check-dns", "--host", "example.test", "--authorized"])[0],
+                1,
+            )
+
+    def test_dns_addresses_are_deduplicated_without_exposing_addresses(self):
+        args = argparse.Namespace(
+            task="check-dns", host="example.test", authorized=True
+        )
+        records = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 0)),
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:db8::1", 0, 0, 0)),
+        ]
+        with patch("network_probe.socket.getaddrinfo", return_value=records):
+            result = network_probe.probe(args)
+        self.assertEqual(result, {"resolved": True, "ipv4_count": 1, "ipv6_count": 1})
+        with (
+            patch("network_probe.socket.getaddrinfo", return_value=[]),
+            self.assertRaises(checks.CheckError),
+        ):
+            network_probe.probe(args)
+        args.authorized = False
+        with (
+            patch("network_probe.socket.getaddrinfo") as lookup,
+            self.assertRaises(checks.CheckError),
+        ):
+            network_probe.probe(args)
+        lookup.assert_not_called()
+
+    def test_dns_child_process_with_localhost_only(self):
+        code, result = self.invoke(["check-dns", "--host", "localhost", "--authorized"])
+        self.assertEqual(code, 0)
+        self.assertTrue(result["resolved"])
+        self.assertGreaterEqual(result["ipv4_count"] + result["ipv6_count"], 1)
+
+    def test_tls_verifies_hostname_and_exact_expiry_threshold(self):
+        args = argparse.Namespace(
+            task="check-tls",
+            host="example.test",
+            port=443,
+            timeout=7,
+            min_days=14,
+            authorized=True,
+        )
+        context, connection = MagicMock(), MagicMock()
+        context.wrap_socket.return_value.__enter__.return_value.getpeercert.return_value = {
+            "notAfter": "expiry"
+        }
+        for days, passes in ((14, True), (13.999, False), (0, False)):
+            with (
+                self.subTest(days=days),
+                patch("network_probe.ssl.create_default_context", return_value=context),
+                patch(
+                    "network_probe.socket.create_connection", return_value=connection
+                ) as connect,
+                patch(
+                    "network_probe.ssl.cert_time_to_seconds", return_value=days * 86400
+                ),
+                patch("network_probe.time.time", return_value=0),
+            ):
+                if passes:
+                    result = network_probe.probe(args)
+                    self.assertEqual(result["days_remaining"], 14)
+                    self.assertTrue(result["verified"])
+                else:
+                    with self.assertRaises(checks.CheckError):
+                        network_probe.probe(args)
+                self.assertEqual(connect.call_args.kwargs["timeout"], 7)
+                self.assertEqual(
+                    context.wrap_socket.call_args.kwargs["server_hostname"],
+                    "example.test",
+                )
+        context.wrap_socket.return_value.__enter__.return_value.getpeercert.return_value = {}
+        with (
+            patch("network_probe.ssl.create_default_context", return_value=context),
+            patch("network_probe.socket.create_connection", return_value=connection),
+            self.assertRaises(checks.CheckError),
+        ):
+            network_probe.probe(args)
+
+    def test_network_child_reports_failures_without_native_output(self):
+        for failure in (
+            checks.CheckError("no permission", 2),
+            OSError("private-host-details"),
+        ):
+            with (
+                patch(
+                    "sys.argv",
+                    ["network_probe.py", "check-tls", "--host", "example.test"],
+                ),
+                patch("network_probe.probe", side_effect=failure),
+                contextlib.redirect_stderr(io.StringIO()) as stream,
+            ):
+                self.assertEqual(
+                    network_probe.main(),
+                    2 if isinstance(failure, checks.CheckError) else 1,
+                )
+                self.assertNotIn("private-host-details", stream.getvalue())
+
+    def test_disk_thresholds_include_boundary_and_each_failure(self):
+        gib = 1024**3
+        for free, code in ((gib, 0), (gib - 1, 1), (2 * gib, 0)):
+            with patch(
+                "checks.shutil.disk_usage",
+                return_value=SimpleNamespace(total=10 * gib, free=free),
+            ):
+                self.assertEqual(self.invoke(["check-disk"])[0], code)
+        with patch(
+            "checks.shutil.disk_usage",
+            return_value=SimpleNamespace(total=100 * gib, free=2 * gib),
+        ):
+            self.assertEqual(self.invoke(["check-disk"])[0], 1)
+        with patch("checks.shutil.disk_usage", side_effect=OSError):
+            self.assertEqual(self.invoke(["check-disk"])[0], 2)
+
+    def test_git_state_handles_renames_newline_paths_and_conflicts_without_writes(self):
+        records = (
+            "1 .M N... metadata path with\nnewline\0"
+            + "2 R. N... metadata renamed\0? old name\0"
+            + "? untracked\0u UU metadata conflict\0"
+        )
+        with patch(
+            "checks.execute", side_effect=["true", "feature/test", records]
+        ) as execute:
+            code, result = self.invoke(["check-git-state"])
+            self.assertEqual(code, 0)
+            self.assertFalse(result["clean"])
+            self.assertEqual(
+                {
+                    key: result[key]
+                    for key in ("staged", "unstaged", "untracked", "conflicted")
+                },
+                {"staged": 1, "unstaged": 1, "untracked": 1, "conflicted": 1},
+            )
+            self.assertNotIn("newline", json.dumps(result))
+            self.assertIn("--no-optional-locks", execute.call_args.args[0])
+        with patch("checks.execute", side_effect=["true", "", ""]):
+            code, result = self.invoke(["check-git-state", "--require-clean"])
+            self.assertEqual(code, 0)
+            self.assertTrue(result["detached"])
+        with patch("checks.execute", side_effect=["true", "main", "? file\0"]):
+            self.assertEqual(self.invoke(["check-git-state", "--require-clean"])[0], 1)
 
     def test_url_validation(self):
         for url in (
@@ -299,6 +478,21 @@ class ChecksTest(unittest.TestCase):
                 return_value=subprocess.CompletedProcess(["tool"], 0, " ok \n", ""),
             ):
                 self.assertEqual(checks.execute(["tool"], 5), "ok")
+            with patch(
+                "checks.subprocess.run",
+                return_value=subprocess.CompletedProcess(
+                    ["tool"],
+                    2,
+                    "",
+                    '{"error":"Explicit target authorization required"}',
+                ),
+            ):
+                with self.assertRaises(checks.CheckError) as caught:
+                    checks.execute(["tool"], 5, redacted_error=True)
+                self.assertEqual(caught.exception.code, 2)
+                self.assertEqual(
+                    str(caught.exception), "Explicit target authorization required"
+                )
 
     def test_numeric_argument_limits(self):
         for func in (checks.bounded_integer, checks.ssh_port):
@@ -307,6 +501,12 @@ class ChecksTest(unittest.TestCase):
                     func(value)
                 self.assertEqual(type(caught.exception).__name__, "ArgumentTypeError")
             self.assertEqual(func("10"), 10)
+        for value in ("-1", "nan", "inf", "invalid"):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                checks.nonnegative_number(value)
+        self.assertEqual(checks.nonnegative_number("0"), 0)
+        with self.assertRaises(argparse.ArgumentTypeError):
+            checks.percentage("100.1")
 
     def test_launcher_platforms_and_missing_shell(self):
         for system in ("Windows", "Linux", "Darwin"):

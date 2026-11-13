@@ -1,4 +1,5 @@
 import argparse
+import importlib.util
 import json
 import sys
 import tempfile
@@ -11,6 +12,179 @@ import setup_agents
 
 
 class SetupTest(unittest.TestCase):
+    def test_atomic_failure_preserves_original_and_cleans_owned_temporary_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "rule.md"
+            target.write_bytes(b"original")
+            with (
+                patch("builtins.print"),
+                patch("setup_agents.os.replace", side_effect=OSError("replace failed")),
+                self.assertRaises(OSError),
+            ):
+                setup_agents.put(target, b"changed", False)
+            self.assertEqual(target.read_bytes(), b"original")
+            self.assertFalse(list(target.parent.glob("*.tmp")))
+            self.assertEqual(
+                next(target.parent.glob("*.agent-rules-backup-*")).read_bytes(),
+                b"original",
+            )
+
+    def test_linked_parent_is_rejected_before_any_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            linked = home / ".claude" / "rules"
+            args = argparse.Namespace(
+                home=str(home),
+                vscode_prompts=str(home / "prompts"),
+                dry_run=False,
+                external_skills=False,
+            )
+            with (
+                patch.object(Path, "is_symlink", lambda path: path == linked),
+                self.assertRaises(ValueError),
+            ):
+                setup_agents.install(args)
+            self.assertFalse((home / ".copilot").exists())
+            self.assertFalse((home / "prompts").exists())
+
+    def test_rules_only_preserves_linked_skill_directories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            args = argparse.Namespace(
+                home=str(home),
+                vscode_prompts=str(home / "prompts"),
+                dry_run=False,
+                external_skills=False,
+                rules_only=True,
+            )
+            linked = home / ".claude" / "skills" / "practice-topic"
+            with (
+                patch.object(Path, "is_symlink", lambda path: path == linked),
+                patch("builtins.print"),
+            ):
+                setup_agents.install(args)
+            self.assertTrue(
+                (home / ".copilot" / "instructions" / "react.instructions.md").is_file()
+            )
+            self.assertTrue((home / ".claude" / "hooks" / "skill_router.py").is_file())
+            self.assertFalse((home / ".claude" / "skills").exists())
+            self.assertFalse((home / ".agents").exists())
+
+    def test_invalid_frontmatter_reports_explicit_errors(self):
+        for metadata in (
+            'description: "Valid"',
+            'applyTo: "**"',
+            'description: ""\napplyTo: "**"',
+            'description: "Valid"\napplyTo: []',
+            'description: "Valid"\napplyTo: [123]',
+            'description: "Valid"\napplyTo: "**"\napplyTo: "*.py"',
+            'description: Unquoted YAML\napplyTo: "**"',
+            'description: "Valid"\napplyTo:\n  - "*.py"',
+        ):
+            with self.subTest(metadata=metadata), self.assertRaises(ValueError):
+                setup_agents.convert(f"---\n{metadata}\n---\nBody\n", False)
+
+    def test_reinstall_replaces_owned_hooks_when_python_changes(self):
+        with tempfile.TemporaryDirectory(prefix="agent profile ") as directory:
+            home = Path(directory)
+            settings = home / ".claude" / "settings.json"
+            with patch("builtins.print"):
+                setup_agents.register_hooks(home, False)
+            data = json.loads(settings.read_text())
+            for event, _, _ in setup_agents.EVENTS:
+                data["hooks"][event][0]["hooks"][0]["command"] = data["hooks"][event][
+                    0
+                ]["hooks"][0]["command"].replace(
+                    str(Path(sys.executable).resolve()), "old-python"
+                )
+            data["hooks"]["Stop"][0]["hooks"].append(
+                {"type": "command", "command": "other-hook"}
+            )
+            settings.write_text(json.dumps(data))
+            with patch("builtins.print"):
+                setup_agents.register_hooks(home, False)
+            result = json.loads(settings.read_text())
+            self.assertEqual(
+                result["hooks"]["Stop"][0]["hooks"],
+                [{"type": "command", "command": "other-hook"}],
+            )
+            for event, _, action in setup_agents.EVENTS:
+                commands = [
+                    item["command"]
+                    for group in result["hooks"][event]
+                    for item in group["hooks"]
+                ]
+                self.assertEqual(
+                    sum(command.endswith(" " + action) for command in commands), 1
+                )
+                self.assertFalse(any("old-python" in command for command in commands))
+            first = settings.read_bytes()
+            with patch("builtins.print"):
+                setup_agents.register_hooks(home, False)
+            self.assertEqual(first, settings.read_bytes())
+
+    def test_owned_hook_matches_legacy_home_reference_and_shell_quoting(self):
+        with tempfile.TemporaryDirectory(prefix="agent profile ") as directory:
+            home = Path(directory)
+            script = home / ".claude" / "hooks" / "skill_router.py"
+            for system in ("Windows", "Linux"):
+                with (
+                    self.subTest(system=system),
+                    patch("setup_agents.platform.system", return_value=system),
+                ):
+                    command = f'python "{script}" stop'
+                    self.assertTrue(
+                        setup_agents.owned_hook(command, script, home, "stop")
+                    )
+                    self.assertTrue(
+                        setup_agents.owned_hook(
+                            'python "$HOME/.claude/hooks/skill_router.py" stop',
+                            script,
+                            home,
+                            "stop",
+                        )
+                    )
+                    self.assertFalse(
+                        setup_agents.owned_hook(
+                            'python "other-script.py" stop', script, home, "stop"
+                        )
+                    )
+                    self.assertFalse(
+                        setup_agents.owned_hook(
+                            'python "unterminated', script, home, "stop"
+                        )
+                    )
+
+    def test_legacy_entry_point_preserves_project_rules_and_installs_claude_only(self):
+        spec = importlib.util.spec_from_file_location(
+            "legacy_setup", setup_agents.ROOT / "install-claude.py"
+        )
+        legacy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(legacy)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            rules = home / ".claude" / "rules" / "agent-rules"
+            rules.mkdir(parents=True)
+            unrelated = rules / "custom.md"
+            unrelated.write_text("keep")
+            changed = rules / "react.md"
+            changed.write_text("old rule")
+            with (
+                patch("sys.argv", ["install-claude.py", str(home)]),
+                patch("builtins.print"),
+            ):
+                self.assertEqual(legacy.main(), 0)
+            self.assertEqual(unrelated.read_text(), "keep")
+            self.assertEqual(
+                next(rules.glob("react.md.agent-rules-backup-*")).read_text(),
+                "old rule",
+            )
+            self.assertFalse((home / ".copilot").exists())
+            self.assertFalse((home / ".agents").exists())
+            self.assertTrue(
+                (home / ".claude" / "skills" / "teach-topic" / "SKILL.md").exists()
+            )
+
     def test_offline_install_preserves_settings_and_is_repeatable(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

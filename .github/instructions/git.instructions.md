@@ -6,6 +6,7 @@ applyTo: ["**/.gitignore", "**/.gitattributes"]
 # Git Guidelines
 
 - Follow the always-on agent permissions: commits, pushes, branch creation, switching, and merging each require explicit user authorization. Implementation requests do not grant that permission.
+- For shared repositories, branch coordination, pull requests, and conflict recovery, load the shared-repository instructions; never assume a teammate's pending work belongs to this task.
 - Make small, focused commits that each do one logical change, and review the diff before committing.
 - Write commit messages with a concise imperative subject line (about 50-72 characters), such as `Add login form validation`, and a body explaining why when needed. Follow Conventional Commits when the project uses them.
 - Use short, descriptive branch names such as `feature/login-form` or `fix/null-user`, and keep branches current with the main branch.

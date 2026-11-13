@@ -29,5 +29,6 @@ applyTo: ["**/{api,routes,routers,controllers,endpoints}/**/*.{js,ts,py}", "**/o
 
 ## Docs and validation
 - Describe the API in OpenAPI and keep it in sync (generate from Zod/Pydantic schemas when possible).
+- Follow the OpenAPI instructions for the project's contract version, validation, security schemes, references, and compatibility checks; do not maintain competing generated and handwritten contracts.
 - Validate all request bodies, params, and queries with schemas; return typed responses.
 - Support idempotency keys for payments and other unsafe retries; set cache headers (`ETag`, `Cache-Control`) on `GET`.

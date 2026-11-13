@@ -1,6 +1,6 @@
 ---
 description: "Use when configuring or maintaining ESLint in an existing JavaScript or TypeScript project, including plugins, flat config, and lint scripts."
-applyTo: ["**/*eslint*", "**/eslint.config.{js,mjs,cjs,ts}", "**/package.json"]
+applyTo: ["**/*eslint*", "**/eslint.config.{js,mjs,cjs,ts}"]
 ---
 
 # ESLint

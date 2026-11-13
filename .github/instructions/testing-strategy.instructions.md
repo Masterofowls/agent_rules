@@ -8,7 +8,7 @@ applyTo: ["**/*.{test,spec}.{js,jsx,ts,tsx}", "**/vitest.config.{js,ts,mjs}", "*
 ## Pyramid
 - Many fast unit tests, a moderate number of integration/component tests, few end-to-end tests for critical flows (sign in, checkout, core feature).
 - Test behavior users see, not implementation details; prefer accessible queries (`getByRole`, `getByLabelText`).
-- Every bug fix gets a regression test.
+- Add a focused regression test for behavior fixes where the existing test setup can exercise the failure; report cases requiring manual verification instead of adding meaningless tests.
 
 ## Vitest
 - In Vite projects use Vitest instead of Jest: shares `vite.config`, native ESM and TypeScript, faster watch mode.
@@ -27,6 +27,6 @@ applyTo: ["**/*.{test,spec}.{js,jsx,ts,tsx}", "**/vitest.config.{js,ts,mjs}", "*
 - Disable animations and mask dynamic content for stable screenshots.
 
 ## Quality
-- Tests are deterministic and independent; no sleeps, no shared state, no real network or time.
+- Unit tests are deterministic and independent: mock uncontrolled network and time, avoid sleeps and shared mutable state. Integration and E2E tests may use isolated local services, test databases, and controlled clocks; never depend on production or unapproved external services.
 - Cover critical logic first; track coverage but do not chase 100%.
 - Run tests in CI on every pull request; keep the suite fast.

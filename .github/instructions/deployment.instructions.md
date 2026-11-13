@@ -85,3 +85,11 @@ applyTo: ["**/vercel.json", "**/netlify.toml", "**/wrangler.{toml,json,jsonc}", 
 - Record the provider, environment, deployment identifier, URL, and checks performed without exposing credentials.
 - Keep a known-good release and a documented rollback path. Do not delete old releases or provider projects without explicit approval.
 - Report failed checks and remaining limitations. Never claim a deployment occurred when only configuration was added.
+
+## Release controls
+- Build once and promote the same tested artifact or image digest; record source revision and environment without exposing secrets. Avoid rebuilding a different artifact during production promotion.
+- Serialize deployments per environment and use approved release gates. Do not cancel an in-progress production rollout merely because a newer commit exists.
+- Choose rolling, blue-green, or canary releases according to platform support and risk. Check compatibility while old and new versions coexist, including database schema, queue messages, caches, and sessions.
+- Define readiness, smoke-test, error-rate, latency, and rollback criteria before changing traffic. Run migrations as a separately authorized step; do not mark a failed migration as rolled back unless its actual state is verified.
+- Check DNS, TLS expiry, disk capacity, runtime dependencies, and recovery through the reusable operational checks where applicable. Health probes must be cheap and must not expose secrets or private infrastructure.
+- Use the DevOps instructions for infrastructure plans, drift, monitoring, backup restoration, and incident changes; deployment approval does not authorize arbitrary infrastructure work.

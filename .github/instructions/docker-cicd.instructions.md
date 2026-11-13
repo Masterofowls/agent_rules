@@ -15,10 +15,10 @@ applyTo: ["**/Dockerfile*", "**/docker-compose*.{yml,yaml}", "**/.dockerignore",
 
 ## GitHub Actions
 - Pipeline order: install, lint (Oxlint), typecheck, test, build, deploy; fail fast and run jobs in parallel where possible.
-- Pin actions to a major version or commit SHA; set minimal `permissions` (`contents: read`).
+- Prefer verified commit-SHA pins for third-party actions and update them deliberately; set minimal job `permissions` (`contents: read` unless more is required).
 - Cache dependencies (`actions/setup-node` with `cache: npm`); run `npm ci`; test on the Node version used in production.
 - Run `npm audit` and optionally CodeQL; upload test and Playwright reports as artifacts.
-- Use `concurrency` to cancel outdated runs on the same branch.
+- Use `concurrency` to cancel outdated lint/test or disposable preview runs; serialize production deployments without blindly canceling a rollout in progress.
 
 ## Environments and deploy
 - Separate `development`, `staging`, and `production` with their own variables and secrets (GitHub Environments, with approvals for production).

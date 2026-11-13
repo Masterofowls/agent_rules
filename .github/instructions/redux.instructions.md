@@ -5,6 +5,8 @@ applyTo: ["**/{store,slices,features,redux}/**/*.{js,jsx,ts,tsx}", "**/*{Slice,s
 
 # Redux Guidelines
 
+Apply these rules when the project uses Redux, confirmed by dependencies or imports. Generic store, feature, or API files do not imply Redux.
+
 - Always use Redux Toolkit (`@reduxjs/toolkit`) instead of plain `redux`: `configureStore`, `createSlice`, `createAsyncThunk`, `createSelector`. Never use legacy `createStore`, `combineReducers` boilerplate, switch-case reducers, or hand-written action types and creators. Install `@reduxjs/toolkit` and `react-redux` only; do not add `redux-thunk`, `redux-saga`, or `redux-devtools-extension` (already built in or unnecessary).
 - Pass reducers directly to `configureStore({ reducer: { feature: featureReducer } })`; keep the default middleware (thunk, immutability and serializability checks) and extend it with `getDefaultMiddleware().concat(...)` rather than replacing it.
 - Export action creators and the reducer from each slice (`export const { added } = slice.actions; export default slice.reducer;`), and name actions as events that happened (`todoAdded`), not setters.
@@ -17,7 +19,7 @@ applyTo: ["**/{store,slices,features,redux}/**/*.{js,jsx,ts,tsx}", "**/*{Slice,s
 - Use typed hooks (`useAppDispatch`, `useAppSelector`) defined once, and select the smallest slice of state needed to avoid extra re-renders.
 - Memoize derived selectors with `createSelector`, and never return new objects or arrays from `useSelector` without memoization.
 - Handle async logic with `createAsyncThunk` or RTK Query using `async`/`await`; model `pending`, `fulfilled`, and `rejected` states, and handle errors explicitly.
-- Use RTK Query (`createApi`) for all server data fetching and caching instead of manual fetch-and-store thunks or copying fetched data into slices.
+- Prefer RTK Query (`createApi`) for new server-data work when it fits the project's Redux architecture. Preserve an established data layer; do not migrate existing fetching as an incidental change or duplicate its cache.
 - Define one API slice per base URL with `createApi` and `fetchBaseQuery`, and split endpoints across files with `injectEndpoints`; add the API `reducer` and `middleware` to the store.
 - Use `builder.query` for reads and `builder.mutation` for writes, and use the generated hooks (`useGetItemsQuery`, `useAddItemMutation`) in components.
 - Use `providesTags` and `invalidatesTags` for cache invalidation so lists refresh after mutations; prefer `onQueryStarted` optimistic updates (`updateQueryData`) with rollback on failure.
@@ -28,7 +30,7 @@ applyTo: ["**/{store,slices,features,redux}/**/*.{js,jsx,ts,tsx}", "**/*{Slice,s
 - Do not duplicate RTK Query data in slices or `useState`; read it through hooks or selectors.
 - Put side effects in thunks or listener middleware, not in reducers.
 - Wrap the app in `<Provider store={store}>` once, near the root.
-- Use Redux Toolkit in all large React projects (many routes, shared state across distant components, complex async data, multiple teams) so state, caching, and data flow stay predictable. Skip it in small apps where `useState`, `useReducer`, and `useContext` are enough; if a small app grows, migrate to Redux Toolkit rather than building a custom store.
+- Choose Redux Toolkit when shared client-state requirements justify Redux, not simply because the app has many routes or teams. Keep simpler state solutions where they suffice; state-library migrations require explicit scope.
 - Always use the modern Redux Toolkit way, never plain Redux: no `createStore`, no `connect`/`mapStateToProps`, no `redux-thunk`/`redux-saga` setup, no manual `switch` reducers. Use `useSelector`/`useDispatch` through the typed hooks.
 - When migrating existing plain Redux code, change one slice at a time with `createSlice`, keep the existing state shape and action type strings, and keep the app working between steps; do not rewrite the whole store at once.
 - Define each slice with a `name`, `initialState`, and `reducers`; use `prepare` callbacks for actions that need generated payloads (ids, timestamps) so reducers stay pure.

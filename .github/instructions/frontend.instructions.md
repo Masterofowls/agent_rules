@@ -1,6 +1,6 @@
 ---
 description: "Use when building website or app frontends, UI components, pages, layouts, forms, or interactive elements. Covers choosing pre-made component libraries (Radix, React Aria, Ant Design, Material UI, shadcn, Untitled UI, Magic UI, Aceternity UI, React Bits) and avoiding Tailwind by default."
-applyTo: ["**/*.{jsx,tsx,css,html}", "src/**/*.{js,ts}"]
+applyTo: "**/*.{jsx,tsx,css,html}"
 ---
 
 # Frontend Component Library Guidelines
